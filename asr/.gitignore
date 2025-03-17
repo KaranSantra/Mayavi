@@ -1,0 +1,11 @@
+.env.local
+.venv/
+
+# Audio files
+*.wav
+*.mp3
+*.m4a
+*.flac
+*.ogg
+*.webm
+*.aac
