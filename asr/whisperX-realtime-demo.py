@@ -109,7 +109,7 @@ class RealTimeTranscriber:
 
 # Usage example
 if __name__ == "__main__":
-    transcriber = RealTimeTranscriber(device="cpu", model_name="medium.en")
+    transcriber = RealTimeTranscriber(device="cpu", model_name="tiny.en")
     print("Starting real-time transcription... Press Ctrl+C to stop")
     try:
         transcriber.start_recording()
