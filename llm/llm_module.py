@@ -115,7 +115,7 @@ class LLMModule:
             outputs = self.model.generate(
                 inputs.input_ids,
                 attention_mask=inputs.attention_mask,
-                max_new_tokens=256,  # Reduced from 512
+                max_new_tokens=128,  # Reduced from 512
                 temperature=0.8,  # Slightly increased for more natural responses
                 top_p=0.7,  # Reduced from 0.9 for more focused responses
                 pad_token_id=self.tokenizer.pad_token_id,
