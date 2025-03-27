@@ -76,9 +76,12 @@ def main():
 
                 # Get and print response
                 print("\nAssistant: ", end="")
+                start_time = time.time()
                 response = receive_response(client_socket)
+                end_time = time.time()
                 if response:
                     print(response)
+                    print(f"\nResponse time: {end_time - start_time:.2f} seconds")
                 else:
                     print("No response received from server")
 

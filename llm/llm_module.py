@@ -16,7 +16,7 @@ class LLMModule:
         host="127.0.0.1",
         port=5001,
         model_name="meta-llama/Llama-3.2-1B-Instruct",
-        device=None,
+        device="mps",
     ):
         # Setup socket
         self.host = host
@@ -75,11 +75,15 @@ class LLMModule:
 
     def format_prompt(self, user_input):
         """Format the prompt with chat history and system message"""
-        # Start with system message
-        messages = [{"role": "system", "content": "You are a helpful AI assistant."}]
+        # Start with system message that encourages concise responses
+        messages = [
+            {
+                "role": "system",
+                "content": "You are a helpful AI assistant. Be concise and conversational in your responses. Keep answers brief but informative.",
+            }
+        ]
 
-        # Add chat history
-        for entry in self.history[-4:]:  # Keep last 4 exchanges for context
+        for entry in self.history[-4:]:
             messages.append({"role": "user", "content": entry["user"]})
             messages.append({"role": "assistant", "content": entry["assistant"]})
 
@@ -111,11 +115,13 @@ class LLMModule:
             outputs = self.model.generate(
                 inputs.input_ids,
                 attention_mask=inputs.attention_mask,
-                max_new_tokens=512,
-                temperature=0.7,
-                top_p=0.9,
+                max_new_tokens=256,  # Reduced from 512
+                temperature=0.8,  # Slightly increased for more natural responses
+                top_p=0.7,  # Reduced from 0.9 for more focused responses
                 pad_token_id=self.tokenizer.pad_token_id,
-                repetition_penalty=1.2,
+                repetition_penalty=1.3,  # Increased slightly to reduce repetition
+                do_sample=True,  # Enable sampling for more natural responses
+                no_repeat_ngram_size=2,  # Prevent repeating 2-grams
             )
 
         response = self.tokenizer.decode(
