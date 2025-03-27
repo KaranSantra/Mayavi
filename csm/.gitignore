@@ -8,7 +8,7 @@ __pycache__/
 LICENSE
 
 # Audio files
-*.wav
+
 *.mp3
 *.flac
 *.ogg
