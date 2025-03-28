@@ -8,15 +8,16 @@ from generator import load_csm_1b, Segment
 
 
 class CSMModule:
-    def __init__(self, host="localhost", port=5002, device="cpu"):
+    def __init__(self, host="localhost", port=5002):
         self.console = Console()
-        self.device = device
+        # Auto-detect device
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.running = False
 
         # Initialize CSM
         try:
-            self.generator = load_csm_1b(device=device)
-            self.console.print("[green]Loaded CSM model[/green]")
+            self.generator = load_csm_1b(device=self.device)
+            self.console.print(f"[green]Loaded CSM model on {self.device}[/green]")
 
             # Load context audio
             self.context_audio = self.load_audio("maya-speaking-15.wav")

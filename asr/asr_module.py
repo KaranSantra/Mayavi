@@ -10,6 +10,7 @@ import socket
 import json
 import re
 import argparse
+import torch
 
 
 class ASRModule:
@@ -17,11 +18,12 @@ class ASRModule:
         self,
         host="127.0.0.1",
         port=5000,
-        device="cpu",
         model_name="tiny.en",
-        compute_type="int8",
     ):
-        self.device = device
+        # Handle device and compute type
+
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.compute_type = "float16" if self.device == "cuda" else "int8"
         self.audio_queue = queue.Queue()
         self.running = False
         self.server_socket = None
@@ -30,7 +32,9 @@ class ASRModule:
         self.port = port
 
         # Initialize whisperX model
-        self.model = whisperx.load_model(model_name, device, compute_type=compute_type)
+        self.model = whisperx.load_model(
+            model_name, self.device, compute_type=self.compute_type
+        )
 
         # Audio recording parameters
         self.CHUNK = 1024 * 3
@@ -244,21 +248,43 @@ class ASRModule:
                 except Exception as e:
                     print(f"ASR Module: Error closing server socket - {e}")
 
-            # Wait for threads to finish
+            # Wait for threads to finish with longer timeout
             if hasattr(self, "record_thread") and self.record_thread:
-                self.record_thread.join(timeout=2.0)
+                self.record_thread.join(timeout=5.0)
 
             if hasattr(self, "process_thread") and self.process_thread:
-                self.process_thread.join(timeout=2.0)
+                self.process_thread.join(timeout=5.0)
+
+            # Clean up CUDA memory if using GPU
+            if hasattr(self, "model") and self.device == "cuda":
+                try:
+                    del self.model
+                    torch.cuda.empty_cache()
+                    gc.collect()
+                except Exception as e:
+                    print(f"ASR Module: Error cleaning up CUDA memory - {e}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ASR Module")
     parser.add_argument("--port", type=int, default=5000, help="Port to listen on")
+    parser.add_argument(
+        "--model_name",
+        type=str,
+        default="tiny.en",
+        choices=["tiny.en", "base.en", "small.en", "medium.en", "large-v2"],
+        help="WhisperX model to use (default: tiny.en)",
+    )
+
     args = parser.parse_args()
 
-    asr_module = ASRModule(port=args.port)
-    print(f"Starting ASR Module on port {args.port}... Press Ctrl+C to stop")
+    asr_module = ASRModule(
+        port=args.port,
+        model_name=args.model_name,
+    )
+    print(
+        f"Starting ASR Module on port {args.port} with model {args.model_name}... Press Ctrl+C to stop"
+    )
     try:
         if asr_module.start_recording():
             while True:

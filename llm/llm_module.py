@@ -16,7 +16,6 @@ class LLMModule:
         host="127.0.0.1",
         port=5001,
         model_name="meta-llama/Llama-3.2-1B-Instruct",
-        device="mps",
     ):
         # Setup socket
         self.host = host
@@ -25,10 +24,14 @@ class LLMModule:
         self.client_socket = None
         self.running = False
 
-        # Setup device
-        self.device = (
-            device if device else ("cuda" if torch.cuda.is_available() else "cpu")
-        )
+        # Auto-detect device
+        if torch.cuda.is_available():
+            self.device = "cuda"
+        elif hasattr(torch, "mps") and torch.backends.mps.is_available():
+            self.device = "mps"
+        else:
+            self.device = "cpu"
+
         print(f"LLM Module: Loading Llama model on {self.device}...")
 
         # Load tokenizer with proper configuration
@@ -36,10 +39,11 @@ class LLMModule:
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
-        # Load model
+        # Load model with appropriate dtype based on device
+        dtype = torch.float16 if self.device == "cuda" else torch.float32
         self.model = AutoModelForCausalLM.from_pretrained(
             model_name,
-            torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+            torch_dtype=dtype,
             low_cpu_mem_usage=True,
         ).to(self.device)
 
