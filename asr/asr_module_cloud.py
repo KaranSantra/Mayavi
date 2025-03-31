@@ -99,86 +99,66 @@ class ASRModule:
                     time.sleep(0.1)
                     continue
 
-                # Parse the JSON message
-                try:
-                    messages = [
-                        json.loads(msg)
-                        for msg in data.decode("utf-8").strip().split("\n")
-                        if msg
-                    ]
+                # Convert binary data to numpy array (assuming float32 format)
+                audio_chunk = np.frombuffer(data, dtype=np.float32)
 
-                    for message in messages:
-                        if message.get("type") == "audio_data":
-                            # Convert hex string back to binary data
-                            audio_data = bytes.fromhex(message.get("data", ""))
+                # Add to buffer
+                audio_buffer.append(audio_chunk)
 
-                            # Convert to numpy array (assuming float32 format)
-                            audio_chunk = np.frombuffer(audio_data, dtype=np.float32)
+                # Update buffer duration
+                buffer_duration += len(audio_chunk) / self.RATE
+
+                # Process buffer when we have enough data
+                if buffer_duration >= target_duration:
+                    # Concatenate audio chunks
+                    audio_data = np.concatenate(audio_buffer)
+
+                    # Transcribe with whisperX
+                    result = self.model.transcribe(audio_data, batch_size=1)
+
+                    # Check if we got any transcription
+                    if result["segments"]:
+                        current_text = result["segments"][0]["text"].strip()
+
+                        # If we have text, update last speech time
+                        if current_text:
+                            self.last_speech_time = time.time()
+                            silence_start = time.time()
 
                             # Add to buffer
-                            audio_buffer.append(audio_chunk)
+                            if not self.buffer:
+                                self.buffer = current_text
+                            else:
+                                self.buffer += " " + current_text
 
-                            # Update buffer duration
-                            buffer_duration += len(audio_chunk) / self.RATE
+                            # Check if the buffer has a sentence ending
+                            if self._is_sentence_end(self.buffer):
+                                self.send_message(self.buffer)
+                                self.buffer = ""
 
-                    # Process buffer when we have enough data
-                    if buffer_duration >= target_duration:
-                        # Concatenate audio chunks
-                        audio_data = np.concatenate(audio_buffer)
+                    # Check if we've been silent long enough to consider it a pause
+                    current_time = time.time()
+                    if self.buffer and (
+                        current_time - silence_start >= self.silence_threshold
+                    ):
+                        self.send_message(self.buffer)
+                        self.buffer = ""
 
-                        # Transcribe with whisperX
-                        result = self.model.transcribe(audio_data, batch_size=1)
+                    # Check if buffer timeout has been reached
+                    if self.buffer and (
+                        current_time - self.last_speech_time >= self.buffer_timeout
+                    ):
+                        self.send_message(self.buffer)
+                        self.buffer = ""
 
-                        # Check if we got any transcription
-                        if result["segments"]:
-                            current_text = result["segments"][0]["text"].strip()
-
-                            # If we have text, update last speech time
-                            if current_text:
-                                self.last_speech_time = time.time()
-                                silence_start = time.time()
-
-                                # Add to buffer
-                                if not self.buffer:
-                                    self.buffer = current_text
-                                else:
-                                    self.buffer += " " + current_text
-
-                                # Check if the buffer has a sentence ending
-                                if self._is_sentence_end(self.buffer):
-                                    self.send_message(self.buffer)
-                                    self.buffer = ""
-
-                        # Check if we've been silent long enough to consider it a pause
-                        current_time = time.time()
-                        if self.buffer and (
-                            current_time - silence_start >= self.silence_threshold
-                        ):
-                            self.send_message(self.buffer)
-                            self.buffer = ""
-
-                        # Check if buffer timeout has been reached
-                        if self.buffer and (
-                            current_time - self.last_speech_time >= self.buffer_timeout
-                        ):
-                            self.send_message(self.buffer)
-                            self.buffer = ""
-
-                        # Reset buffer
-                        audio_buffer = []
-                        buffer_duration = 0
-
-                except json.JSONDecodeError as e:
-                    print(f"ASR Module: JSON decode error - {e}")
-                except Exception as e:
-                    print(f"ASR Module: Error processing audio - {e}")
+                    # Reset buffer
                     audio_buffer = []
                     buffer_duration = 0
 
             except Exception as e:
-                print(f"ASR Module: Socket error - {e}")
-                if not self.running:
-                    break
+                print(f"ASR Module: Error processing audio - {e}")
+                audio_buffer = []
+                buffer_duration = 0
                 time.sleep(0.1)  # Prevent tight loop on error
 
     def _is_sentence_end(self, text):
