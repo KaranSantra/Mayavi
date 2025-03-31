@@ -8,6 +8,11 @@ import threading
 import torch
 import argparse
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from rich.console import Console
+from rich.panel import Panel
+from rich.traceback import install
+
+install(show_locals=True)
 
 
 class LLMModule:
@@ -17,6 +22,20 @@ class LLMModule:
         port=5001,
         model_name="meta-llama/Llama-3.2-1B-Instruct",
     ):
+        self.console = Console(log_time=True)
+        self.console.print(
+            "[bold yellow]====== Initializing LLM Module ======[/bold yellow]"
+        )
+
+        # Log initialization parameters
+        self.console.print(
+            Panel(
+                f"Host: {host}\nPort: {port}\nModel: {model_name}",
+                title="Configuration",
+                style="cyan",
+            )
+        )
+
         # Setup socket
         self.host = host
         self.port = port
@@ -27,25 +46,59 @@ class LLMModule:
         # Auto-detect device
         if torch.cuda.is_available():
             self.device = "cuda"
+            self.console.print(f"[green]CUDA available:[/green]")
+            self.console.print(f"  Device: {torch.cuda.get_device_name()}")
+            self.console.print(
+                f"  Memory Available: {torch.cuda.get_device_properties(0).total_memory/1e9:.2f}GB"
+            )
         elif hasattr(torch, "mps") and torch.backends.mps.is_available():
             self.device = "mps"
+            self.console.print("[green]Using Apple M-series GPU (MPS)[/green]")
         else:
             self.device = "cpu"
+            self.console.print(
+                "[yellow]⚠ Using CPU - processing may be slower[/yellow]"
+            )
 
         print(f"LLM Module: Loading Llama model on {self.device}...")
 
         # Load tokenizer with proper configuration
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        if self.tokenizer.pad_token is None:
-            self.tokenizer.pad_token = self.tokenizer.eos_token
+        self.console.print(f"\n[yellow]Loading model components...[/yellow]")
 
-        # Load model with appropriate dtype based on device
-        dtype = torch.float16 if self.device == "cuda" else torch.float32
-        self.model = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            torch_dtype=dtype,
-            low_cpu_mem_usage=True,
-        ).to(self.device)
+        try:
+            with self.console.status("[bold yellow]Loading tokenizer...") as status:
+                self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+                if self.tokenizer.pad_token is None:
+                    self.console.print(
+                        "[yellow]⚠ No pad token found, using EOS token[/yellow]"
+                    )
+                    self.tokenizer.pad_token = self.tokenizer.eos_token
+                self.console.print("[green]✓ Tokenizer loaded successfully[/green]")
+
+            dtype = torch.float16 if self.device == "cuda" else torch.float32
+            self.console.print(f"[cyan]Using dtype: {dtype}[/cyan]")
+
+            with self.console.status("[bold yellow]Loading model...") as status:
+                start_time = time.time()
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    model_name,
+                    torch_dtype=dtype,
+                    low_cpu_mem_usage=True,
+                ).to(self.device)
+                load_time = time.time() - start_time
+                self.console.print(
+                    f"[green]✓ Model loaded successfully in {load_time:.2f}s[/green]"
+                )
+
+        except Exception as e:
+            self.console.print(
+                Panel(
+                    f"Error: {str(e)}\nType: {type(e).__name__}",
+                    title="Model Loading Error",
+                    style="red bold",
+                )
+            )
+            raise
 
         print("LLM Module: Model loaded successfully!")
 
@@ -54,17 +107,34 @@ class LLMModule:
 
     def start_server(self):
         """Start a socket server to communicate with the main program"""
+        self.console.print("\n[yellow]Starting socket server...[/yellow]")
         try:
             self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self.server_socket.bind((self.host, self.port))
             self.server_socket.listen(1)
-            print(f"LLM Module: Socket server started at {self.host}:{self.port}")
+            self.console.print(
+                f"[green]✓ Socket bound to {self.host}:{self.port}[/green]"
+            )
+
+            self.console.print("[yellow]Waiting for client connection...[/yellow]")
             self.client_socket, addr = self.server_socket.accept()
-            print(f"LLM Module: Connected to client at {addr}")
+            self.console.print(
+                Panel(
+                    f"Client Address: {addr[0]}\nPort: {addr[1]}",
+                    title="Client Connected",
+                    style="green",
+                )
+            )
             return True
         except Exception as e:
-            print(f"LLM Module: Socket error - {e}")
+            self.console.print(
+                Panel(
+                    f"Error: {str(e)}\nType: {type(e).__name__}",
+                    title="Socket Error",
+                    style="red bold",
+                )
+            )
             return False
 
     def send_response(self, response):

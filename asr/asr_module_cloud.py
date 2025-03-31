@@ -10,6 +10,7 @@ import json
 import re
 import argparse
 import torch
+from rich.console import Console
 
 
 class ASRModule:
@@ -19,8 +20,20 @@ class ASRModule:
         port=5000,
         model_name="tiny.en",
     ):
+        self.console = Console(log_time=True)
+        self.console.print(
+            "[bold yellow]====== Initializing ASR Module ======[/bold yellow]"
+        )
+
         # Handle device and compute type
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.console.print(f"[cyan]Using device: {self.device}[/cyan]")
+        if self.device == "cuda":
+            self.console.print(f"  CUDA Device: {torch.cuda.get_device_name()}")
+            self.console.print(
+                f"  Memory Allocated: {torch.cuda.memory_allocated()/1e9:.2f}GB"
+            )
+
         self.compute_type = "float16" if self.device == "cuda" else "int8"
         self.audio_queue = queue.Queue()
         self.running = False
@@ -30,9 +43,16 @@ class ASRModule:
         self.port = port
 
         # Initialize whisperX model
-        self.model = whisperx.load_model(
-            model_name, self.device, compute_type=self.compute_type
-        )
+        self.console.print(f"[yellow]Loading WhisperX model: {model_name}[/yellow]")
+        try:
+            with self.console.status("[bold yellow]Loading model...") as status:
+                self.model = whisperx.load_model(
+                    model_name, self.device, compute_type=self.compute_type
+                )
+                self.console.print("[green]✓ Model loaded successfully[/green]")
+        except Exception as e:
+            self.console.print(f"[red bold]✗ Failed to load model: {str(e)}[/red bold]")
+            raise
 
         # Parameters for sentence boundary detection
         self.buffer = ""
@@ -85,22 +105,37 @@ class ASRModule:
         return True
 
     def _process_audio_from_socket(self):
-        """Process audio chunks received from socket and transcribe with WhisperX"""
+        """Process audio chunks with detailed logging"""
         audio_buffer = []
         buffer_duration = 0
-        target_duration = 3.0  # Process 3 seconds of audio at a time
-        silence_start = time.time()
+        chunks_processed = 0
 
         while self.running:
             try:
-                # Wait for data from the server
                 data = self.client_socket.recv(4096)
                 if not data:
+                    self.console.print(
+                        "[yellow]⚠ No data received, waiting...[/yellow]"
+                    )
                     time.sleep(0.1)
                     continue
 
-                # Convert binary data to numpy array (assuming float32 format)
+                # Log received data details
+                chunks_processed += 1
+                self.console.print(
+                    f"[cyan]📥 Received audio chunk #{chunks_processed}:[/cyan]\n"
+                    f"  Size: {len(data)} bytes\n"
+                    f"  First 16 bytes: {data[:16].hex()}"
+                )
+
+                # Convert and process audio
                 audio_chunk = np.frombuffer(data, dtype=np.float32)
+                self.console.print(
+                    f"[blue]Audio chunk details:[/blue]\n"
+                    f"  Samples: {len(audio_chunk)}\n"
+                    f"  Range: {audio_chunk.min():.3f} to {audio_chunk.max():.3f}\n"
+                    f"  Mean: {audio_chunk.mean():.3f}"
+                )
 
                 # Add to buffer
                 audio_buffer.append(audio_chunk)
@@ -109,7 +144,7 @@ class ASRModule:
                 buffer_duration += len(audio_chunk) / self.RATE
 
                 # Process buffer when we have enough data
-                if buffer_duration >= target_duration:
+                if buffer_duration >= 3.0:
                     # Concatenate audio chunks
                     audio_data = np.concatenate(audio_buffer)
 
@@ -123,7 +158,6 @@ class ASRModule:
                         # If we have text, update last speech time
                         if current_text:
                             self.last_speech_time = time.time()
-                            silence_start = time.time()
 
                             # Add to buffer
                             if not self.buffer:
@@ -139,7 +173,7 @@ class ASRModule:
                     # Check if we've been silent long enough to consider it a pause
                     current_time = time.time()
                     if self.buffer and (
-                        current_time - silence_start >= self.silence_threshold
+                        current_time - self.last_speech_time >= self.silence_threshold
                     ):
                         self.send_message(self.buffer)
                         self.buffer = ""
