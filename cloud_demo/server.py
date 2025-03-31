@@ -9,7 +9,13 @@ from rich.panel import Panel
 from rich.live import Live
 from rich.layout import Layout
 from rich.text import Text
-from config import setup_logging, SERVER_HOST, SERVER_PORT, CHUNK_SIZE, SAMPLE_RATE
+from config import (
+    setup_logging,
+    SERVER_INTERNAL_HOST,
+    SERVER_PORT,
+    CHUNK_SIZE,
+    SAMPLE_RATE,
+)
 
 
 class AudioServer:
@@ -233,12 +239,15 @@ class AudioServer:
         """Main server loop"""
         try:
             server = await websockets.serve(
-                self.handle_client, SERVER_HOST, SERVER_PORT
+                self.handle_client, SERVER_INTERNAL_HOST, SERVER_PORT
             )
 
-            self.logger.info(f"Server started on ws://{SERVER_HOST}:{SERVER_PORT}")
+            self.logger.info(
+                f"Server started on ws://{SERVER_INTERNAL_HOST}:{SERVER_PORT}"
+            )
             self.status_text.append(
-                f"Server running on ws://{SERVER_HOST}:{SERVER_PORT}", style="green"
+                f"Server running on ws://{SERVER_INTERNAL_HOST}:{SERVER_PORT}",
+                style="green",
             )
 
             with Live(self.layout, refresh_per_second=4) as live:

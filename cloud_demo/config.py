@@ -4,7 +4,8 @@ from rich.logging import RichHandler
 import os
 
 # Network Configuration
-SERVER_HOST = "34.122.21.225"  # Server listens on all interfaces
+SERVER_EXTERNAL_HOST = "34.31.192.6"  # Server listens on all interfaces
+SERVER_INTERNAL_HOST = "0.0.0.0"  # Server listens on all interfaces
 SERVER_PORT = 8765  # WebSocket port
 CHUNK_SIZE = 1024
 SAMPLE_RATE = 16000
