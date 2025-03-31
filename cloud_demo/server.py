@@ -9,6 +9,8 @@ from rich.panel import Panel
 from rich.live import Live
 from rich.layout import Layout
 from rich.text import Text
+from rich import print as rprint
+from rich.table import Table
 from config import (
     setup_logging,
     SERVER_INTERNAL_HOST,
@@ -61,28 +63,39 @@ class AudioServer:
     ):
         """Connect to ASR, LLM, and CSM services"""
         try:
+            self.console.print(f"[yellow]⏳ Connecting to services...[/yellow]")
+
             # Connect to ASR service
             self.asr_socket.connect((asr_host, asr_port))
-            self.logger.info("Connected to ASR service")
+            self.console.print(
+                f"[green]✓ Connected to ASR service at {asr_host}:{asr_port}[/green]"
+            )
 
             # Connect to LLM service
             self.llm_socket.connect((llm_host, llm_port))
-            self.logger.info("Connected to LLM service")
+            self.console.print(
+                f"[green]✓ Connected to LLM service at {llm_host}:{llm_port}[/green]"
+            )
 
             # Connect to CSM service
             self.csm_socket.connect((csm_host, csm_port))
-            self.logger.info("Connected to CSM service")
+            self.console.print(
+                f"[green]✓ Connected to CSM service at {csm_host}:{csm_port}[/green]"
+            )
 
         except ConnectionRefusedError as e:
-            self.logger.error(f"Failed to connect to services: {str(e)}")
+            self.console.print(f"[red]✗ Failed to connect to services: {str(e)}[/red]")
             raise
 
     async def handle_client(self, websocket, path):
         """Handle individual client connections"""
         client_id = id(websocket)
         self.clients.add(websocket)
-        self.logger.info(f"New client connected (ID: {client_id})")
-        self.status_text.append(f"Client {client_id} connected", style="green")
+
+        timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+        self.console.print(
+            f"[{timestamp}] [blue]➤ New client connected (ID: {client_id})[/blue]"
+        )
 
         try:
             # Send start command to ASR service
@@ -92,13 +105,23 @@ class AudioServer:
             while True:
                 message = await websocket.recv()
                 data = json.loads(message)
+                timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
 
                 if data["type"] == "audio_data":
-                    # Convert hex string back to bytes
                     audio_data = bytes.fromhex(data["data"])
+
+                    # Print audio data details
+                    self.console.print(
+                        f"[{timestamp}] [cyan]📥 Received audio chunk:[/cyan]\n"
+                        f"  Size: {len(audio_data)} bytes\n"
+                        f"  First 8 bytes: {audio_data[:8].hex()}"
+                    )
 
                     # Send to ASR service
                     self.asr_socket.send(audio_data)
+                    self.console.print(
+                        f"[{timestamp}] [cyan]➤ Sent to ASR service[/cyan]"
+                    )
 
                     # Get ASR response
                     asr_response = self.asr_socket.recv(4096).decode("utf-8")
@@ -107,51 +130,38 @@ class AudioServer:
                         if asr_data["type"] == "transcription":
                             transcribed_text = asr_data["text"].strip()
                             if transcribed_text:
-                                # Log and display transcription
-                                self.logger.info(f"Transcription: {transcribed_text}")
-                                self.transcription_text.append(
-                                    f"\nClient {client_id}: {transcribed_text}"
-                                )
-
-                                # Send to client
-                                await websocket.send(
-                                    json.dumps(
-                                        {
-                                            "type": "transcription",
-                                            "text": transcribed_text,
-                                        }
-                                    )
+                                self.console.print(
+                                    f"[{timestamp}] [green]🎯 Transcription:[/green] {transcribed_text}"
                                 )
 
                                 # Send to LLM
+                                self.console.print(
+                                    f"[{timestamp}] [cyan]➤ Sending to LLM...[/cyan]"
+                                )
                                 self.send_to_llm(transcribed_text)
                                 llm_response = self.receive_from_llm()
 
                                 if llm_response:
-                                    # Log and display LLM response
-                                    self.logger.info(f"LLM Response: {llm_response}")
-                                    self.response_text.append(
-                                        f"\nAssistant: {llm_response}"
-                                    )
-
-                                    # Send to client
-                                    await websocket.send(
-                                        json.dumps(
-                                            {
-                                                "type": "llm_response",
-                                                "text": llm_response,
-                                            }
-                                        )
+                                    self.console.print(
+                                        f"[{timestamp}] [green]💡 LLM Response:[/green] {llm_response}"
                                     )
 
                                     # Generate voice response
+                                    self.console.print(
+                                        f"[{timestamp}] [cyan]➤ Requesting voice generation...[/cyan]"
+                                    )
                                     self.send_to_csm(llm_response)
                                     audio_file = self.receive_from_csm()
 
                                     if audio_file:
-                                        # Read audio file and send to client
                                         with open(audio_file, "rb") as f:
                                             audio_data = f.read()
+                                            self.console.print(
+                                                f"[{timestamp}] [cyan]📤 Sending audio response:[/cyan]\n"
+                                                f"  File: {audio_file}\n"
+                                                f"  Size: {len(audio_data)} bytes\n"
+                                                f"  First 8 bytes: {audio_data[:8].hex()}"
+                                            )
                                             await websocket.send(
                                                 json.dumps(
                                                     {
@@ -160,15 +170,17 @@ class AudioServer:
                                                     }
                                                 )
                                             )
-                                        self.logger.debug(
-                                            "Sent audio response to client"
-                                        )
 
         except websockets.exceptions.ConnectionClosed:
-            self.logger.info(f"Client {client_id} disconnected")
-            self.status_text.append(f"Client {client_id} disconnected", style="red")
+            timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+            self.console.print(
+                f"[{timestamp}] [red]✗ Client {client_id} disconnected[/red]"
+            )
         except Exception as e:
-            self.logger.error(f"Error handling client {client_id}: {str(e)}")
+            timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+            self.console.print(
+                f"[{timestamp}] [red]✗ Error handling client {client_id}: {str(e)}[/red]"
+            )
         finally:
             self.clients.remove(websocket)
 
@@ -223,18 +235,6 @@ class AudioServer:
             self.logger.error(f"Error receiving from CSM: {str(e)}")
         return None
 
-    def update_display(self):
-        """Update the rich console display"""
-        self.layout["header"].update(Panel(self.status_text, title="Status"))
-        self.layout["main"].update(
-            Panel(
-                f"{self.transcription_text}\n\n{self.response_text}",
-                title="Conversation",
-                border_style="white",
-            )
-        )
-        self.layout["footer"].update(Panel("Press Ctrl+C to exit", style="yellow"))
-
     async def run(self):
         """Main server loop"""
         try:
@@ -242,23 +242,21 @@ class AudioServer:
                 self.handle_client, SERVER_INTERNAL_HOST, SERVER_PORT
             )
 
-            self.logger.info(
-                f"Server started on ws://{SERVER_INTERNAL_HOST}:{SERVER_PORT}"
-            )
-            self.status_text.append(
-                f"Server running on ws://{SERVER_INTERNAL_HOST}:{SERVER_PORT}",
-                style="green",
+            self.console.print(
+                Panel(
+                    f"Server running on ws://{SERVER_INTERNAL_HOST}:{SERVER_PORT}",
+                    style="green bold",
+                    title="Server Status",
+                )
             )
 
-            with Live(self.layout, refresh_per_second=4) as live:
-                while True:
-                    self.update_display()
-                    await asyncio.sleep(0.25)
+            # Keep server running
+            await asyncio.Future()  # run forever
 
         except KeyboardInterrupt:
-            self.logger.info("Server shutting down...")
+            self.console.print("[yellow]Server shutting down...[/yellow]")
         except Exception as e:
-            self.logger.error(f"Error in main loop: {str(e)}")
+            self.console.print(f"[red]Error in main loop: {str(e)}[/red]")
         finally:
             self.cleanup()
 
