@@ -1,2 +1,10 @@
-Ask any questions that you need to get information to take better decision. 
+Ask any questions that you need to get information to take better decision.
 Once I approve only then show the coding implementation.
+
+Code Style Guidelines:
+
+- Prioritize readability with concise implementation
+- Use lambda functions for simple operations (one-liners)
+- Avoid creating standalone functions unless they'll be called 3+ times
+- Prefer inline code for operations used fewer than 3 times
+- Maintain descriptive variable names despite brevity
