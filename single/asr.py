@@ -14,9 +14,11 @@ logger = logging.getLogger(__name__)
 
 
 @lru_cache(maxsize=1)
-def get_whisper_model(model_name="tiny.en", device="cpu", compute_type="int8"):
+def get_whisper_model(model_name="tiny.en", device=None, compute_type=None):
     """Get or create a singleton instance of the WhisperX model."""
     try:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        compute_type = "float16" if device == "cuda" else "int8"
         model = whisperx.load_model(model_name, device, compute_type=compute_type)
         logger.info(f"ASR model loaded successfully: {model_name} on {device}")
         return model
@@ -26,8 +28,10 @@ def get_whisper_model(model_name="tiny.en", device="cpu", compute_type="int8"):
 
 
 class ASR:
-    def __init__(self, model_name="base.en", device="cpu", compute_type="int8"):
+    def __init__(self, model_name="tiny.en"):
         """Initialize the ASR model."""
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        compute_type = "float16" if device == "cuda" else "int8"
         self.model = get_whisper_model(model_name, device, compute_type)
         self.device = device
         self.target_sample_rate = 16000

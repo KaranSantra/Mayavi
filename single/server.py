@@ -24,17 +24,9 @@ class Server:
         # Initialize ASR with appropriate device
         device = "cuda" if torch.cuda.is_available() else "cpu"
         compute_type = "float16" if device == "cuda" else "int8"
-        self.asr = ASR(model_name="base.en", device=device, compute_type=compute_type)
+        self.asr = ASR(model_name="medium.en")
 
-        # Initialize LLM with appropriate device
-        llm_device = "cuda" if torch.cuda.is_available() else "cpu"
-        llm_compute_type = "float16" if llm_device == "cuda" else "int8"
-        self.llm = LLMModule(
-            host="localhost",
-            port=llm_port,
-            device=llm_device,
-            compute_type=llm_compute_type,
-        )
+        self.llm = LLMModule(host="localhost", port=llm_port)
 
         self.audio_buffer = []
         self.buffer_size = 16000 * 3  # 3 seconds of audio at 16kHz
