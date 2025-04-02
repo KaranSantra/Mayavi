@@ -69,50 +69,46 @@ class Server:
 
     def handle_client(self, client_socket):
         """Handle a client connection."""
-        audio_buffer = []
         try:
             while self.running:
                 try:
-                    # Receive audio chunk
-                    data = client_socket.recv(4096)  # Adjust buffer size as needed
-                    if not data:
+                    # Receive header length (4 bytes)
+                    header_length_bytes = client_socket.recv(4)
+                    if not header_length_bytes:
                         break
 
+                    header_length = int.from_bytes(header_length_bytes, byteorder="big")
+
+                    # Receive header
+                    header_bytes = client_socket.recv(header_length)
+                    if not header_bytes:
+                        break
+
+                    header = json.loads(header_bytes.decode("utf-8"))
+
+                    # Receive audio data
+                    audio_data = b""
+                    remaining = header["length"]
+                    while remaining > 0:
+                        chunk = client_socket.recv(min(remaining, 4096))
+                        if not chunk:
+                            break
+                        audio_data += chunk
+                        remaining -= len(chunk)
+
                     # Convert bytes to numpy array
-                    audio_chunk = np.frombuffer(data, dtype=np.float32)
-                    audio_buffer.extend(audio_chunk)
+                    audio_chunk = np.frombuffer(audio_data, dtype=np.float32)
 
-                    # Process audio when buffer is full
-                    if len(audio_buffer) >= self.buffer_size:
-                        audio_data = np.array(audio_buffer[: self.buffer_size])
-                        transcript = self.process_audio(audio_data)
+                    # Process audio
+                    transcript = self.process_audio(audio_chunk)
 
-                        # Send transcript to LLM and get response
-                        if transcript:
-                            # Send transcript to client
-                            transcript_data = {
-                                "type": "transcription",
-                                "text": transcript,
-                            }
-                            client_socket.send(
-                                f"{json.dumps(transcript_data)}\n".encode()
-                            )
-                            logger.info(f"Sent transcript: {transcript}")
+                    # Send response
+                    response = {"status": "success", "transcript": transcript}
+                    response_bytes = json.dumps(response).encode("utf-8")
+                    response_length = len(response_bytes).to_bytes(4, byteorder="big")
 
-                            # Get LLM response
-                            llm_response = self.llm.generate_response(transcript)
-                            if llm_response:
-                                response_data = {
-                                    "type": "llm_response",
-                                    "text": llm_response,
-                                }
-                                client_socket.send(
-                                    f"{json.dumps(response_data)}\n".encode()
-                                )
-                                logger.info(f"Sent LLM response: {llm_response}")
-
-                        # Keep remaining audio in buffer
-                        audio_buffer = audio_buffer[self.buffer_size :]
+                    client_socket.send(response_length)
+                    client_socket.send(response_bytes)
 
                 except socket.error as e:
                     logger.error(f"Error receiving data: {e}")
