@@ -5,6 +5,7 @@ import logging
 import json
 from asr import ASR
 from llm import LLMModule
+import torch
 
 # Configure logging
 logging.basicConfig(
@@ -19,8 +20,22 @@ class Server:
         self.port = port
         self.running = False
         self.server_socket = None
-        self.asr = ASR()
-        self.llm = LLMModule(host="localhost", port=llm_port)
+
+        # Initialize ASR with appropriate device
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        compute_type = "float16" if device == "cuda" else "int8"
+        self.asr = ASR(model_name="base.en", device=device, compute_type=compute_type)
+
+        # Initialize LLM with appropriate device
+        llm_device = "cuda" if torch.cuda.is_available() else "cpu"
+        llm_compute_type = "float16" if llm_device == "cuda" else "int8"
+        self.llm = LLMModule(
+            host="localhost",
+            port=llm_port,
+            device=llm_device,
+            compute_type=llm_compute_type,
+        )
+
         self.audio_buffer = []
         self.buffer_size = 16000 * 3  # 3 seconds of audio at 16kHz
         self.client_threads = []
