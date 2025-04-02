@@ -17,8 +17,6 @@ logger = logging.getLogger(__name__)
 def get_whisper_model(model_name="base.en", device="cpu", compute_type="int8"):
     """Get or create a singleton instance of the WhisperX model."""
     try:
-        # Force CPU for consistency
-        device = "cpu"
         model = whisperx.load_model(model_name, device, compute_type=compute_type)
         logger.info(f"ASR model loaded successfully: {model_name} on {device}")
         return model

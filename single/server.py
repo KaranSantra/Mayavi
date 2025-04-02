@@ -80,6 +80,7 @@ class Server:
                         # Send transcript back to client
                         if transcript:
                             client_socket.send(transcript.encode())
+                            logger.info(f"Sent transcript: {transcript}")
 
                         # Keep remaining audio in buffer
                         audio_buffer = audio_buffer[self.buffer_size :]
@@ -112,3 +113,16 @@ class Server:
         for thread in self.client_threads:
             thread.join(timeout=1)
         self.client_threads.clear()
+
+
+if __name__ == "__main__":
+    # Create and start server
+    server = Server()
+    try:
+        server.start()
+    except KeyboardInterrupt:
+        logger.info("Server stopped by user")
+    except Exception as e:
+        logger.error(f"Server error: {e}")
+    finally:
+        server.stop()
