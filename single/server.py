@@ -2,7 +2,9 @@ import socket
 import threading
 import numpy as np
 import logging
+import json
 from asr import ASR
+from llm import LLMModule
 
 # Configure logging
 logging.basicConfig(
@@ -12,12 +14,13 @@ logger = logging.getLogger(__name__)
 
 
 class Server:
-    def __init__(self, host="localhost", port=5000):
+    def __init__(self, host="0.0.0.0", port=5000, llm_port=5001):
         self.host = host
         self.port = port
         self.running = False
         self.server_socket = None
         self.asr = ASR()
+        self.llm = LLMModule(host="localhost", port=llm_port)
         self.audio_buffer = []
         self.buffer_size = 16000 * 3  # 3 seconds of audio at 16kHz
         self.client_threads = []
@@ -77,10 +80,29 @@ class Server:
                         audio_data = np.array(audio_buffer[: self.buffer_size])
                         transcript = self.process_audio(audio_data)
 
-                        # Send transcript back to client
+                        # Send transcript to LLM and get response
                         if transcript:
-                            client_socket.send(transcript.encode())
+                            # Send transcript to client
+                            transcript_data = {
+                                "type": "transcription",
+                                "text": transcript,
+                            }
+                            client_socket.send(
+                                f"{json.dumps(transcript_data)}\n".encode()
+                            )
                             logger.info(f"Sent transcript: {transcript}")
+
+                            # Get LLM response
+                            llm_response = self.llm.generate_response(transcript)
+                            if llm_response:
+                                response_data = {
+                                    "type": "llm_response",
+                                    "text": llm_response,
+                                }
+                                client_socket.send(
+                                    f"{json.dumps(response_data)}\n".encode()
+                                )
+                                logger.info(f"Sent LLM response: {llm_response}")
 
                         # Keep remaining audio in buffer
                         audio_buffer = audio_buffer[self.buffer_size :]
@@ -108,6 +130,9 @@ class Server:
         if self.server_socket:
             self.server_socket.close()
             self.server_socket = None
+
+        # Stop LLM module
+        self.llm.stop()
 
         # Wait for client threads to finish
         for thread in self.client_threads:

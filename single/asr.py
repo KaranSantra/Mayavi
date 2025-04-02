@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 @lru_cache(maxsize=1)
-def get_whisper_model(model_name="base.en", device="cpu", compute_type="int8"):
+def get_whisper_model(model_name="tiny.en", device="cpu", compute_type="int8"):
     """Get or create a singleton instance of the WhisperX model."""
     try:
         model = whisperx.load_model(model_name, device, compute_type=compute_type)

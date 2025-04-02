@@ -1,0 +1,13 @@
+
+[Microphone] → client.py (records audio)
+    ↓
+main.py (coordinates)
+    ↓
+audio_streamer.py (sends to server)
+    ↓
+server.py (processes with ASR)
+    ↓
+[Transcription] → main.py (displays results)
+
+---------------------------------------------
+

@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 class AudioStreamer:
     def __init__(self, host="localhost", port=5000):
+        """Initialize the audio streamer."""
         self.host = host
         self.port = port
         self.sent_chunks = []
@@ -24,6 +25,7 @@ class AudioStreamer:
         self.connected = False
         self.max_retries = 3
         self.retry_delay = 1  # seconds
+        self.logger = logging.getLogger(__name__)
 
     def start_streaming(self):
         """Start the streaming process."""
@@ -41,10 +43,10 @@ class AudioStreamer:
                 self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 self.socket.connect((self.host, self.port))
                 self.connected = True
-                logger.info(f"Connected to server at {self.host}:{self.port}")
+                self.logger.info(f"Connected to server at {self.host}:{self.port}")
             except socket.error as e:
                 retries += 1
-                logger.error(f"Connection attempt {retries} failed: {e}")
+                self.logger.error(f"Connection attempt {retries} failed: {e}")
                 if retries < self.max_retries:
                     time.sleep(self.retry_delay)
                 else:
@@ -66,14 +68,14 @@ class AudioStreamer:
             except queue.Empty:
                 continue
             except socket.error as e:
-                logger.error(f"Error sending audio chunk: {e}")
+                self.logger.error(f"Error sending audio chunk: {e}")
                 self.connected = False
                 try:
                     self.connect()
                 except:
                     break
             except Exception as e:
-                logger.error(f"Unexpected error in streaming: {e}")
+                self.logger.error(f"Unexpected error in streaming: {e}")
                 break
 
     def stop(self):

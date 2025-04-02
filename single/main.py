@@ -1,5 +1,6 @@
 import signal
 import sys
+import argparse
 from client import Client
 from audio_streamer import AudioStreamer
 import logging
@@ -38,12 +39,18 @@ def signal_handler(sig, frame):
 
 
 if __name__ == "__main__":
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="Speech-to-Text Client")
+    parser.add_argument("--host", default="localhost", help="Server host address")
+    parser.add_argument("--port", type=int, default=5000, help="Server port")
+    args = parser.parse_args()
+
     # Set up signal handler
     signal.signal(signal.SIGINT, signal_handler)
 
     # Initialize components
     client = Client()
-    streamer = AudioStreamer()
+    streamer = AudioStreamer(host=args.host, port=args.port)
 
     try:
         # Start recording
@@ -51,7 +58,7 @@ if __name__ == "__main__":
         client.start_recording()
 
         # Start streaming
-        logger.info("Starting audio streaming...")
+        logger.info(f"Starting audio streaming to {args.host}:{args.port}...")
         streamer.start_streaming()
 
         # Start transcript receiver thread
