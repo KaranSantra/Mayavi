@@ -1,6 +1,8 @@
 Ask any questions that you need to get information to take better decision.
 Once I approve only then show the coding implementation.
 
+Very Important : Write tests first, then the code, then run the tests and update the code until tests pass.
+
 Code Style Guidelines:
 
 - Prioritize readability with concise implementation
